@@ -24,7 +24,7 @@ A Python application that monitors stock price changes and sends relevant news a
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/momed-ali01/stock-news.git
+git clone https://github.com/<username>/stock-news.git
 cd stock-news
 ```
 
@@ -105,7 +105,3 @@ Feel free to submit issues and enhancement requests!
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Security Note
-
-Never commit your API keys to version control. Consider using environment variables or a configuration file for sensitive credentials.

@@ -1,91 +1,158 @@
+import os
+import smtplib
 import requests
-from twilio.rest import Client
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
 
-STOCK_NAME = "TSLA"
-COMPANY_NAME = "Tesla Inc"
+# Load environment variables
+load_dotenv()
 
-STOCK_ENDPOINT = "https://www.alphavantage.co/query"
-STOCK_API_KEY = "L8NSPMRVJH42MRG6"
-NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
-NEWS_API_KEY = "17ba26d3879b4ffda64409edf5b590cf"
-TWILIO_ACCOUNT_SID = "AC935638423523477086d6ca2fc803f00e"
-TWILIO_AUTH_TOKEN = "14705bf691130b3b1b7259868df570da"
+# Environment variables
+stock_endpoint = os.getenv("STOCK_ENDPOINT")
+stock_api_key = os.getenv("STOCK_API_KEY")
+news_endpoint = os.getenv("NEWS_ENDPOINT")
+news_api_key = os.getenv("NEWS_API_KEY")
+sender_email = os.getenv("SENDER_EMAIL")
+receiver_email = os.getenv("RECEIVER_EMAIL")
+sender_password = os.getenv("SENDER_PASSWORD")
 
-# STEP 1: Use https://www.alphavantage.co/documentation/#daily
-# When stock price increase/decreases by 5% between yesterday and the day before yesterday then print("Get News").
-
-# Get yesterday's closing stock price. Hint: You can perform list comprehensions on Python dictionaries. e.g. [
-# new_value for (key, value) in dictionary.items()]
-stock_params = {
-    "function": "TIME_SERIES_DAILY",
-    "symbol": STOCK_NAME,
-    "apikey": STOCK_API_KEY
-
+# Validate all required environment variables
+required_vars = {
+    "STOCK_ENDPOINT": stock_endpoint,
+    "STOCK_API_KEY": stock_api_key,
+    "NEWS_ENDPOINT": news_endpoint,
+    "NEWS_API_KEY": news_api_key,
+    "SENDER_EMAIL": sender_email,
+    "RECEIVER_EMAIL": receiver_email,
+    "SENDER_PASSWORD": sender_password,
 }
 
-response = requests.get(STOCK_ENDPOINT, params=stock_params)
-data = response.json()["Time Series (Daily)"]
-data_list = [value for (key, value) in data.items()]
-yesterday_data = data_list[0]
-yesterday_closing_price = yesterday_data["4. close"]
+missing_vars = [var for var, value in required_vars.items() if value is None]
+if missing_vars:
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
-# Get the day before yesterday's closing stock price
-day_before_yesterday_data = data_list[1]
-day_before_yesterday_closing_price = day_before_yesterday_data["4. close"]
+# List of stocks to monitor
+STOCKS = {
+    "TSLA": "Tesla Inc",
+    "AAPL": "Apple Inc",
+    "GOOG": "Alphabet Inc",
+    "AMZN": "Amazon.com Inc",
+    "META": "Meta Platforms Inc",
+    "IBM": "IBM Corporation",
+    "INTC": "Intel Corporation",
+    "NVDA": "NVIDIA Corporation",
+    "MSFT": "Microsoft Corporation",
+    # Add more stocks as needed
+}
 
-# Find the positive difference between 1 and 2. e.g. 40 - 20 = -20, but the positive difference is 20. Hint:
-# https://www.w3schools.com/python/ref_func_abs.asp
-difference = abs(float(yesterday_closing_price) - float(day_before_yesterday_closing_price))
-up_down = None
-if difference > 0:
-    up_down = "🔼"
-else:
-    up_down = "🔽"
-
-
-# Work out the percentage difference in price between closing price yesterday and closing price the day before
-# yesterday.
-diff_percent = round((difference / float(yesterday_closing_price)) * 100)
-
-# If percentage is greater than 5 then print("Get News").
-if abs(diff_percent) > 5:
-    print("Gettin' News")
-    # Instead of printing ("Get News"), use the News API to get articles related to the COMPANY_NAME.
-    news_params = {
-        "q": COMPANY_NAME,
+# Process each stock in the list
+for stock_name, stock_company in STOCKS.items():
+    print(f"\nProcessing stock: {stock_name} - {stock_company}")
+    
+    stock_params = {
+        "function": "TIME_SERIES_DAILY",
+        "symbol": stock_name,
+        "apikey": stock_api_key
     }
-    news_headers = {
-        "X-Api-Key": NEWS_API_KEY
-    }
-    news_response = requests.get(NEWS_ENDPOINT, params=news_params, headers=news_headers)
-    articles = news_response.json()["articles"]
 
-    # Use Python slice operator to create a list that contains the first 3 articles.
-    # Hint: https://stackoverflow.com/questions/509211/understanding-slice-notation
-    three_articles = articles[:3]
-    # STEP 3: Use twilio.com/docs/sms/quickstart/python
-    # to send a separate message with each article's title and description to your phone number.
+    try:
+        response = requests.get(url=stock_endpoint, params=stock_params)
+        response.raise_for_status()
+        data = response.json().get("Time Series (Daily)", {})
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching stock data for {stock_name}: {e}")
+        continue
+    except ValueError as e:
+        print(f"Error parsing JSON response: {e}")
+        continue
+    else:
+        data_list = [value for (key, value) in data.items()]
+        if len(data_list) < 2:
+            print(f"Not enough data for {stock_name}")
+            continue
 
-    # TODO 8. - Create a new list of the first 3 article's headline and description using list comprehension.
-    formatted_articles =[f"{STOCK_NAME}: {up_down}{diff_percent}% \nHeadline: {article['title']}. \nBrief: {article['description']}" for article in three_articles]
-    print(formatted_articles)
+        # Get yesterday's closing stock price
+        yesterday_data = data_list[0]
+        yesterday_closing_price = float(yesterday_data["4. close"])
 
-    # TODO 9. - Send each article as a separate message via Twilio.
-    for article in formatted_articles:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        message = client.messages.create(
-            from_='+12083143160',
-            to='+252638114350',
-            body=article
-        )
+        # Get the day before yesterday's closing stock price
+        day_before_yesterday_data = data_list[1]
+        day_before_yesterday_closing_price = float(day_before_yesterday_data["4. close"])
 
-# Optional TODO: Format the message like this:
-"""
-TSLA: 🔺2%
-Headline: Were Hedge Funds Right About Piling Into Tesla Inc. (TSLA)?. 
-Brief: We at Insider Monkey have gone over 821 13F filings that hedge funds and prominent investors are required to file by the SEC The 13F filings show the funds' and investors' portfolio positions as of March 31st, near the height of the coronavirus market crash.
-or
-"TSLA: 🔻5%
-Headline: Were Hedge Funds Right About Piling Into Tesla Inc. (TSLA)?. 
-Brief: We at Insider Monkey have gone over 821 13F filings that hedge funds and prominent investors are required to file by the SEC The 13F filings show the funds' and investors' portfolio positions as of March 31st, near the height of the coronavirus market crash.
-"""
+        # Find the positive difference
+        difference = abs(yesterday_closing_price - day_before_yesterday_closing_price)
+
+        # Determine if the price is up or down
+        up_down = None
+        if yesterday_closing_price > day_before_yesterday_closing_price:
+            up_down = "🔼"
+        else:
+            up_down = "🔽"
+
+        # Work out the percentage difference
+        diff_percent = round((difference / yesterday_closing_price) * 100, 2)
+
+        # If percentage is greater than 5 then get news
+        if abs(diff_percent) > 5:
+            print(f"Getting news for {stock_name}")
+            news_params = {
+                "q": stock_company,
+            }
+            news_headers = {
+                "X-Api-Key": news_api_key
+            }
+            try:
+                news_response = requests.get(news_endpoint, params=news_params, headers=news_headers)
+                news_response.raise_for_status()
+                articles = news_response.json()["articles"]
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching news for {stock_name}: {e}")
+                continue
+            except ValueError as e:
+                print(f"Error parsing JSON response: {e}")
+                continue
+            else:
+                # Get the first 3 articles
+                three_articles = articles[:3]
+
+                # Create email body with formatted articles
+                email_body = f"{stock_name}: {up_down}{diff_percent}%\n\n"
+                email_body += "=" * 50 + "\n\n"
+                
+                for i, article in enumerate(three_articles, 1):
+                    email_body += f"Article {i}:\n"
+                    email_body += f"Headline: {article['title']}\n"
+                    email_body += f"Brief: {article.get('description', 'No description available')}\n"
+                    if article.get('url'):
+                        email_body += f"Link: {article['url']}\n"
+                    email_body += "\n" + "-" * 50 + "\n\n"
+
+                # Send Email with proper formatting
+                try:
+                    # Create message
+                    msg = MIMEMultipart()
+                    msg['From'] = sender_email
+                    msg['To'] = receiver_email
+                    msg['Subject'] = f"{stock_name} Stock Alert: {up_down}{diff_percent}%"
+                    
+                    # Attach body to email
+                    msg.attach(MIMEText(email_body, 'plain'))
+                    
+                    # Send email
+                    with smtplib.SMTP("smtp.gmail.com") as connection:
+                        connection.starttls()
+                        connection.login(user=sender_email, password=sender_password)
+                        connection.send_message(msg)
+                    
+                    print(f"Email sent successfully for {stock_name}")
+                except smtplib.SMTPAuthenticationError as e:
+                    print(f"SMTP authentication failed: {e}")
+                    print("Note: For Gmail, you may need to use an 'App Password' instead of your regular password")
+                except smtplib.SMTPException as e:
+                    print(f"SMTP error occurred: {e}")
+                except Exception as e:
+                    print(f"Unexpected error sending email: {e}")
+        else:
+            print(f"{stock_name}: {up_down}{diff_percent}% - No significant change (threshold: 5%)")
+

@@ -35,7 +35,15 @@ git clone https://github.com/<username>/stock-news.git
 cd stock-news
 ```
 
-2. Install required dependencies:
+2. Create a virtual environment (optional but recommended):
+
+```bash
+python -m venv venv
+venv\Scripts\activate # On Windows
+source venv/bin/activate # On macOS/Linux
+```
+
+3. Install the required dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -65,7 +73,6 @@ SENDER_PASSWORD=your_gmail_app_password
 ### API Keys
 
 1. **Alpha Vantage API Key**:
-
    - Sign up at: https://www.alphavantage.co/
    - Free tier available (500 API calls per day)
    - Copy your API key and add it to `.env` as `STOCK_API_KEY`
@@ -199,4 +206,4 @@ Feel free to submit issues and enhancement requests!
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is for educational purposes.
